@@ -92,11 +92,114 @@ def plot_leaderboard(leaderboard):
     )
     return fig
 
+
+def plot_technical_analyis(coin="BTC-USD", boll_window = 30):
+    """returning technical analysis plots for a certain coin over the time of existence of the coin"""
+
+    df = yf.download(tickers=coin, period = "max", interval = "1d")
+    #bollinger window parameters
+    df['sma'] = df['Close'].rolling(boll_window).mean()
+    df['std'] = df['Close'].rolling(boll_window).std(ddof = 0)
+    df.reset_index(inplace=True)
+    layout = go.Layout(
+        autosize=False,
+        xaxis= go.layout.XAxis(linecolor = 'black',
+                              linewidth = 1,
+                              mirror = True),
+
+        yaxis= go.layout.YAxis(linecolor = 'black',
+                              linewidth = 1,
+                              mirror = True),
+        margin=go.layout.Margin(
+            l=50,
+            r=50,
+            b=100,
+            t=100,
+            pad = 4
+        )
+    )
+    fig = go.Figure(
+        data=[go.Candlestick(
+        x=df.index,
+        open=df['Open'], high=df['High'],
+        low=df['Low'], close=df['Close'],
+        increasing_line_color= 'Green', decreasing_line_color= 'Red'
+    ), 
+                go.Scatter(
+                    x = df.index, 
+                    y = df["Close"].rolling(window=21).mean(),
+                    mode = 'lines', 
+                    name = '21SMA',
+                    line = {'color': '#ffff00'}
+                ),
+                go.Scatter(
+                    x = df.index, 
+                    y = df["Close"].rolling(window=50).mean(),
+                    mode = 'lines',
+                    name = '50SMA',
+                    line = {'color': '#00ff11'}
+                ), 
+                go.Scatter(
+                    x = df.index, 
+                    y = df["Close"].rolling(window=200).mean(),
+                    mode = 'lines', 
+                    name = '200SMA',
+                    line = {'color': '#ff0008'}
+                ), 
+                go.Scatter(
+                    x = df.index, 
+                    y = df["sma"],
+                    mode = 'lines', 
+                    name = '30SMA',
+                    line = {'color': '#b300ff'}
+                ),
+                 go.Scatter(
+                    x = df.index, 
+                    y = df['sma'] + (df['std'] * 2),
+                    line_color = 'gray',
+                    line = {'dash': 'dash'},
+                    name = 'upper band',
+                    opacity = 0.5
+                ),
+                go.Scatter(
+                    x = df.index, 
+                    y = df['sma'] - (df['std'] * 2),
+                    line_color = 'gray',
+                    line = {'dash': 'dash'},
+                    fill = 'tonexty',
+                    name = 'lower band',
+                    opacity = 0.5
+                ),
+            ]
+        ,layout=layout)
+    fig2 = go.Figure(
+                data = go.Bar(
+                    x = df.index,
+                    y = df["Volume"],
+                    marker_color = "black"
+                )
+    )
+    fig.update_layout(
+        title = f'The Candlestick graph for {coin}',
+        xaxis_title = 'Date',
+        yaxis_title = f'{coin}',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        xaxis_rangeslider_visible = False
+    )
+    fig.update_yaxes(tickprefix='$')
+    fig2.update_layout(
+        title = f'The Barchart graph showing volume for {coin}',
+        xaxis_title = 'Date',
+        yaxis_title = 'Amount of asset traded during the day',
+        xaxis_rangeslider_visible = False,
+        autosize=False,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
+    return fig, fig2
+
 data_lb, leaderboard = create_leaderboard("1mo")
 top1, top2, bot1, bot2 = get_top_bot(data_lb, leaderboard)
 plt_lb = plot_leaderboard(leaderboard)
-plt_lb.show()
-top1.show()
-top2.show()
-bot1.show()
-bot2.show()
+plt_analysis = plot_technical_analyis("BTC-USD", 30)
