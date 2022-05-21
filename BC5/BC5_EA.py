@@ -2,6 +2,34 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import plotly.graph_objs as go
+import dash_bootstrap_components as dbc
+import dash
+from dash import dcc, Dash, html
+from dash.dependencies import Input, Output
+import base64
+from plotly.subplots import make_subplots
+import warnings
+warnings.filterwarnings("ignore")
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Calling the app
+app = Dash(external_stylesheets=[dbc.themes.GRID])
+
+dropdown_leaderboard = dcc.Dropdown(
+    id='leaderboard_drop',
+    className = "dropdown",
+    options={"1d":"Last Day", "5d":"Last Five Days", "1mo":"Last Month", "2mo":"Last Two Months", "3mo":"Last Quarter", "1y":"Last Year"},
+    value='1y',
+    multi=False,
+    clearable = False,
+    style={"box-shadow" : "1px 1px 3px lightgray", "background-color" : "white"}
+    )
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Functions to create plots
+
+image_filename = 'ims_logo.png' # replace with your own image
+encoded_image = base64.b64encode(open(image_filename, 'rb').read())
 
 coins_bc4 = ['ADA-USD', 'ATOM-USD', 'AVAX-USD', 'AXS-USD', 'LUNA1-USD', 'MATIC-USD', 'BTC-USD', 'ETH-USD', 'SOL-USD', "LINK-USD"]
 coins_added = ["DOGE-USD", "DOT-USD", "TRX-USD", "SHIB-USD", "LTC-USD", "XMR-USD", "FLOW-USD", "HNT-USD", "QNT-USD", "PAXG-USD"]
@@ -12,6 +40,8 @@ def create_leaderboard(lb_range = "1d"):
     possible values for argument: one day 1d, five days 5d, one month 1mo, 2months 2mo, one quarter 3mo, one year 1y"""
     if (lb_range == "1d"):
         data_lb = yf.download(tickers=coins, period = "2d", interval = "15m")
+    elif (lb_range == "5d"):
+        data_lb = yf.download(tickers=coins, period = "2d", interval = "60m")
     else:
         data_lb = yf.download(tickers=coins, period = lb_range, interval = "1d")
     # creating empty df
@@ -26,42 +56,11 @@ def create_leaderboard(lb_range = "1d"):
 
 def get_linegraph(close_price, coin_name):
     #layout
-    fig = go.Figure(
-        layout = go.Layout(
-        autosize=False,
-        # width=1000,
-        # height=1000,
-        xaxis= go.layout.XAxis(linecolor = 'black',
-                              linewidth = 1,
-                              mirror = True),
-
-        yaxis= go.layout.YAxis(linecolor = 'black',
-                              linewidth = 1,
-                              mirror = True),
-        margin=go.layout.Margin(
-            l=50,
-            r=50,
-            b=100,
-            t=100,
-            pad = 4
-        ))
+    fig = go.Scatter(
+        x = close_price.index,
+        y = close_price.values,
+        name = coin_name,
     )
-    #scatter
-    fig = fig.add_trace(
-        go.Scatter(
-            x = close_price.index,
-            y = close_price.values,
-            name = coin_name,
-        )
-    )
-    fig.update_layout(
-        title = coin_name,
-        xaxis_title = 'Date',
-        yaxis_title = f'Close Price',
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)'
-    )
-    fig.update_yaxes(tickprefix='$')
     return fig
 
 
@@ -199,7 +198,78 @@ def plot_technical_analyis(coin="BTC-USD", boll_window = 30):
     )
     return fig, fig2
 
-data_lb, leaderboard = create_leaderboard("1mo")
-top1, top2, bot1, bot2 = get_top_bot(data_lb, leaderboard)
-plt_lb = plot_leaderboard(leaderboard)
-plt_analysis = plot_technical_analyis("BTC-USD", 30)
+# ----------------------------------------------------------------------------------------------------------------------
+# App Layout
+
+# ----------------------------------------------------------------------------------------------------------------------
+# App layout
+app.layout = dbc.Container([
+
+    # 1st Row
+    dbc.Row([
+        dbc.Col(html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image.decode()))),width=1),
+        dbc.Col([html.H1("Crypto Currencies Dashboard",style={'letter-spacing': '1.5px','font-weight': 'bold','text-transform': 'uppercase'}),
+                 html.H2("Business Case n. 5  -  Group I", style={'margin-bottom': '5px'})],
+                width=9)
+    ]),
+
+    # Intermediate Row - Story telling
+    dbc.Row(dbc.Col(html.H2("Discover the coins that performed better in a specified range of time by comparing their percentage changes over the course of the chosen range", style={'margin-bottom': '5px'}))),
+    # Intermediate Row - DropDown Menu
+    dbc.Row(dbc.Col(html.Div(dropdown_leaderboard),width=6, style={'padding': '0px 15px 0px'})),
+
+    # 2nd Row
+    dbc.Row([
+        dbc.Col(html.Div(
+            dcc.Graph(id="leaderboard", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white"})),
+            width=6,
+            style={'padding':'2px 15px 15px 15px'}),
+        dbc.Col(html.Div(
+            dcc.Graph(id="leaderboard_coins", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white"})),
+            width=6,
+            style={'padding':'2px 15px 15px 15px'}),
+    ]),
+],
+#Container
+fluid=True,
+style={'background-color':'#F2F2F2',
+       'font-family': 'sans-serif',
+       'color': '#606060',
+       'font-size':'14px'
+})
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Callbacks
+@app.callback(
+    [Output(component_id='leaderboard', component_property='figure'),
+     Output(component_id='leaderboard_coins', component_property='figure')],
+    [Input('leaderboard_drop', 'value')])
+
+def plot(range):
+    data_lb, leaderboard = create_leaderboard(range)
+    top1, top2, bot1, bot2 = get_top_bot(data_lb, leaderboard)
+    plt_coins = make_subplots(rows = 2, cols = 2, start_cell="bottom-left")
+    plt_coins.add_trace(top1, row = 1, col = 1)
+    plt_coins.add_trace(top2, row = 1, col = 2)
+    plt_coins.add_trace(bot1, row = 2, col = 1)
+    plt_coins.add_trace(bot2, row = 2, col = 2)
+    plt_lb = plot_leaderboard(leaderboard)
+    plt_coins.update_layout(
+        title = "Top 2 and Worst 2 coins in the leaderboard",
+        # title_xanchor="center",
+        xaxis_title = 'Date',
+        xaxis = {"color" : "black"},
+        yaxis_title = f'Close Price',
+        # title_yanchor="center",
+        yaxis = {"color" : "black"},
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
+    plt_coins.update_yaxes(tickprefix='$')
+    
+    return plt_lb, plt_coins
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Running the app
+if __name__ == '__main__':
+    app.run_server(debug=True)
