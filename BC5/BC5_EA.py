@@ -15,6 +15,14 @@ warnings.filterwarnings("ignore")
 # Calling the app
 app = Dash(external_stylesheets=[dbc.themes.GRID])
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Building the necessary elements / functions
+
+coins_bc4 = ['ADA-USD', 'ATOM-USD', 'AVAX-USD', 'AXS-USD', 'LUNA1-USD', 'MATIC-USD', 'BTC-USD', 'ETH-USD', 'SOL-USD', "LINK-USD"]
+coins_added = ["DOGE-USD", "DOT-USD", "TRX-USD", "SHIB-USD", "LTC-USD", "XMR-USD", "FLOW-USD", "HNT-USD", "QNT-USD", "PAXG-USD"]
+coins = coins_bc4 + coins_added
+coins.sort()
+
 dropdown_leaderboard = dcc.Dropdown(
     id='leaderboard_drop',
     className = "dropdown",
@@ -25,15 +33,30 @@ dropdown_leaderboard = dcc.Dropdown(
     style={"box-shadow" : "1px 1px 3px lightgray", "background-color" : "white"}
     )
 
+dropdown_tech_analysis_coin = dcc.Dropdown(
+    id='tech_analysis_coin_drop',
+    className = "dropdown",
+    options=coins,
+    placeholder="Select a coin you want to examine",
+    multi=False,
+    clearable = False,
+    style={"box-shadow" : "1px 1px 3px lightgray", "background-color" : "white"}
+    )
+dropdown_tech_analysis_range = dcc.Dropdown(
+    id='tech_analysis_range_drop',
+    className = "dropdown",
+    options={"4h":"Last Four Hours", "1d":"Last Day", "5d":"Last Five Days", "1mo":"Last Month", "3mo":"Last Quarter", "1y":"Last Year", "max":"Coin Life" },
+    value='max',
+    multi=False,
+    clearable = False,
+    style={"box-shadow" : "1px 1px 3px lightgray", "background-color" : "white"}
+    )
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Functions to create plots
 
 image_filename = 'ims_logo.png' # replace with your own image
 encoded_image = base64.b64encode(open(image_filename, 'rb').read())
-
-coins_bc4 = ['ADA-USD', 'ATOM-USD', 'AVAX-USD', 'AXS-USD', 'LUNA1-USD', 'MATIC-USD', 'BTC-USD', 'ETH-USD', 'SOL-USD', "LINK-USD"]
-coins_added = ["DOGE-USD", "DOT-USD", "TRX-USD", "SHIB-USD", "LTC-USD", "XMR-USD", "FLOW-USD", "HNT-USD", "QNT-USD", "PAXG-USD"]
-coins = coins_bc4 + coins_added
 
 def create_leaderboard(lb_range = "1d"):
     """creates a leaderboard of the most performing coins in a time range 
@@ -86,16 +109,27 @@ def plot_leaderboard(leaderboard):
                fill_color='white',
                align='center'))
     ])
-    fig.update_layout(
-        title = 'Leaderboard'
-    )
     return fig
 
 
-def plot_technical_analyis(coin="BTC-USD", boll_window = 30):
+def plot_technical_analyis(coin='BTC-USD', range="max"):
     """returning technical analysis plots for a certain coin over the time of existence of the coin"""
 
-    df = yf.download(tickers=coin, period = "max", interval = "1d")
+    if (range in ["1h", "4h"]):
+        boll_window = 18
+        df = yf.download(tickers=coin, period = range, interval = "1m")
+        df.reset_index(inplace = True)
+        x_axis = df["Datetime"]
+    if (range in ["1d", "5d"]):
+        boll_window = 18
+        df = yf.download(tickers=coin, period = range, interval = "15m")
+        df.reset_index(inplace = True)
+        x_axis = df["Datetime"]
+    if (range in ["1mo", "3mo", "1y", "max"]):
+        boll_window = 30
+        df = yf.download(tickers=coin, period = range, interval = "1d")
+        x_axis = df.index
+    
     #bollinger window parameters
     df['sma'] = df['Close'].rolling(boll_window).mean()
     df['std'] = df['Close'].rolling(boll_window).std(ddof = 0)
@@ -119,41 +153,41 @@ def plot_technical_analyis(coin="BTC-USD", boll_window = 30):
     )
     fig = go.Figure(
         data=[go.Candlestick(
-        x=df.index,
+        x=x_axis,
         open=df['Open'], high=df['High'],
         low=df['Low'], close=df['Close'],
         increasing_line_color= 'Green', decreasing_line_color= 'Red'
     ), 
                 go.Scatter(
-                    x = df.index, 
+                    x = x_axis, 
                     y = df["Close"].rolling(window=21).mean(),
                     mode = 'lines', 
                     name = '21SMA',
                     line = {'color': '#ffff00'}
                 ),
                 go.Scatter(
-                    x = df.index, 
+                    x = x_axis, 
                     y = df["Close"].rolling(window=50).mean(),
                     mode = 'lines',
                     name = '50SMA',
                     line = {'color': '#00ff11'}
                 ), 
                 go.Scatter(
-                    x = df.index, 
+                    x = x_axis, 
                     y = df["Close"].rolling(window=200).mean(),
-                    mode = 'lines', 
+                    mode = 'lines',
                     name = '200SMA',
                     line = {'color': '#ff0008'}
                 ), 
                 go.Scatter(
-                    x = df.index, 
+                    x = x_axis, 
                     y = df["sma"],
                     mode = 'lines', 
                     name = '30SMA',
                     line = {'color': '#b300ff'}
                 ),
                  go.Scatter(
-                    x = df.index, 
+                    x = x_axis, 
                     y = df['sma'] + (df['std'] * 2),
                     line_color = 'gray',
                     line = {'dash': 'dash'},
@@ -161,7 +195,7 @@ def plot_technical_analyis(coin="BTC-USD", boll_window = 30):
                     opacity = 0.5
                 ),
                 go.Scatter(
-                    x = df.index, 
+                    x = x_axis, 
                     y = df['sma'] - (df['std'] * 2),
                     line_color = 'gray',
                     line = {'dash': 'dash'},
@@ -173,7 +207,7 @@ def plot_technical_analyis(coin="BTC-USD", boll_window = 30):
         ,layout=layout)
     fig2 = go.Figure(
                 data = go.Bar(
-                    x = df.index,
+                    x = x_axis,
                     y = df["Volume"],
                     marker_color = "black"
                 )
@@ -216,7 +250,7 @@ app.layout = dbc.Container([
     # Intermediate Row - Story telling
     dbc.Row(dbc.Col(html.H2("Discover the coins that performed better in a specified range of time by comparing their percentage changes over the course of the chosen range", style={'margin-bottom': '5px'}))),
     # Intermediate Row - DropDown Menu
-    dbc.Row(dbc.Col(html.Div(dropdown_leaderboard),width=6, style={'padding': '0px 15px 0px'})),
+    dbc.Row(dbc.Col(html.Div(dropdown_leaderboard),width=4, style={'padding': '0px 15px 0px', "align" : "center"})),
 
     # 2nd Row
     dbc.Row([
@@ -229,6 +263,24 @@ app.layout = dbc.Container([
             width=6,
             style={'padding':'2px 15px 15px 15px'}),
     ]),
+
+    # Intermediate Row - Story telling
+    dbc.Row(dbc.Col(html.H2("Analyze a single coin by looking at the technical analysis built for you", style={'margin-bottom': '5px'}))),
+    # Intermediate Row - DropDown Menu
+    dbc.Row([dbc.Col(html.Div(dropdown_tech_analysis_coin),width=4, style={'padding': '0px 15px 0px', 'align' : "center"}),
+        dbc.Col(html.Div(dropdown_tech_analysis_range),width=4, style={'padding': '0px 15px 0px', 'align' : "center"})]),
+
+    # 2nd Row
+    dbc.Row([
+        dbc.Col(html.Div(
+            dcc.Graph(id="technical_analysis", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white"})),
+            width=8,
+            style={'padding':'2px 15px 15px 15px'}),
+        dbc.Col(html.Div(
+            dcc.Graph(id="technical_analysis_vol", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white"})),
+            width=4,
+            style={'padding':'2px 15px 15px 15px'})
+    ]),
 ],
 #Container
 fluid=True,
@@ -240,6 +292,8 @@ style={'background-color':'#F2F2F2',
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Callbacks
+
+# 1st callback -> creates the leaderboard and leaderbord coins subplots
 @app.callback(
     [Output(component_id='leaderboard', component_property='figure'),
      Output(component_id='leaderboard_coins', component_property='figure')],
@@ -248,7 +302,7 @@ style={'background-color':'#F2F2F2',
 def plot(range):
     data_lb, leaderboard = create_leaderboard(range)
     top1, top2, bot1, bot2 = get_top_bot(data_lb, leaderboard)
-    plt_coins = make_subplots(rows = 2, cols = 2, start_cell="bottom-left")
+    plt_coins = make_subplots(rows = 2, cols = 2)
     plt_coins.add_trace(top1, row = 1, col = 1)
     plt_coins.add_trace(top2, row = 1, col = 2)
     plt_coins.add_trace(bot1, row = 2, col = 1)
@@ -256,11 +310,9 @@ def plot(range):
     plt_lb = plot_leaderboard(leaderboard)
     plt_coins.update_layout(
         title = "Top 2 and Worst 2 coins in the leaderboard",
-        # title_xanchor="center",
         xaxis_title = 'Date',
         xaxis = {"color" : "black"},
         yaxis_title = f'Close Price',
-        # title_yanchor="center",
         yaxis = {"color" : "black"},
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)'
@@ -268,6 +320,20 @@ def plot(range):
     plt_coins.update_yaxes(tickprefix='$')
     
     return plt_lb, plt_coins
+
+# 2nd callback -> builds technical analysis graph
+@app.callback(
+    [Output(component_id='technical_analysis', component_property='figure'),
+    Output(component_id='technical_analysis_vol', component_property='figure')],
+    [Input('tech_analysis_coin_drop', 'value'),
+    Input('tech_analysis_range_drop', 'value')])
+
+def plot(coin, range):
+    # first run of the dashboard
+    if coin not in coins:
+        coin = "BTC-USD"
+    plt_ta = plot_technical_analyis(coin, range)
+    return plt_ta
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Running the app
