@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 import yfinance as yf
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 import plotly.graph_objs as go
 import dash_bootstrap_components as dbc
 import dash
@@ -46,12 +48,21 @@ dropdown_tech_analysis_coin = dcc.Dropdown(
 dropdown_tech_analysis_range = dcc.Dropdown(
     id='tech_analysis_range_drop',
     className = "dropdown",
-    options={"4h":"Last Four Hours", "1d":"Last Day", "5d":"Last Five Days", "1mo":"Last Month", "3mo":"Last Quarter", "1y":"Last Year", "max":"Coin Life" },
+    # options={"4h":"Last Four Hours", "1d":"Last Day", "5d":"Last Five Days", "1mo":"Last Month", "3mo":"Last Quarter", "1y":"Last Year", "max":"Coin Life" },
+    options={"1d":"Last Day", "5d":"Last Five Days", "1mo":"Last Month", "3mo":"Last Quarter", "1y":"Last Year", "max":"Coin Life" },
     value='max',
     multi=False,
     clearable = False,
     style={"box-shadow" : "1px 1px 3px lightgray", "background-color" : "white"}
     )
+
+data_lb_1d = yf.download(tickers=coins, period = "1d", interval = "15m")
+data_lb_5d = yf.download(tickers=coins, period = "5d", interval = "60m")
+data_lb_1y = yf.download(tickers=coins, period = "1y", interval = "1d")
+data_lb_1mo = data_lb_1y.reset_index().loc[data_lb_1y.reset_index()["Date"] >= datetime.now() - relativedelta(months=1)].set_index("Date")
+data_lb_2mo = data_lb_1y.reset_index().loc[data_lb_1y.reset_index()["Date"] >= datetime.now() - relativedelta(months=2)].set_index("Date")
+data_lb_3mo = data_lb_1y.reset_index().loc[data_lb_1y.reset_index()["Date"] >= datetime.now() - relativedelta(months=3)].set_index("Date")
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Functions to create plots
@@ -62,12 +73,20 @@ encoded_image = base64.b64encode(open(image_filename, 'rb').read())
 def create_leaderboard(lb_range = "1d"):
     """creates a leaderboard of the most performing coins in a time range 
     possible values for argument: one day 1d, five days 5d, one month 1mo, 2months 2mo, one quarter 3mo, one year 1y"""
+
     if (lb_range == "1d"):
-        data_lb = yf.download(tickers=coins, period = "2d", interval = "15m")
+        data_lb = data_lb_1d
     elif (lb_range == "5d"):
-        data_lb = yf.download(tickers=coins, period = "2d", interval = "60m")
+        data_lb = data_lb_5d
+    elif (lb_range == "1mo"):
+        data_lb = data_lb_1mo
+    elif (lb_range == "2mo"):
+        data_lb = data_lb_2mo
+    elif (lb_range == "3mo"):
+        data_lb = data_lb_3mo
     else:
-        data_lb = yf.download(tickers=coins, period = lb_range, interval = "1d")
+        data_lb = data_lb_1y
+
     # creating empty df
     leaderboard = pd.DataFrame(columns = ["Percentage"])
     # appending percentage change in the timeframe for each coin into leaderboard df
@@ -101,6 +120,7 @@ def get_top_bot(data_lb, leaderboard):
 
 def plot_leaderboard(leaderboard):
     """returns the table leaderboard figure"""
+
     leaderboard.dropna(inplace=True)
     fig = go.Figure(data=[go.Table(
     header=dict(values=["Coins", "Percentage change in closing price"],
