@@ -10,6 +10,8 @@ from dash import dcc, Dash, html
 from dash.dependencies import Input, Output
 import base64
 from plotly.subplots import make_subplots
+import json
+import requests
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -40,7 +42,7 @@ dropdown_tech_analysis_coin = dcc.Dropdown(
     id='tech_analysis_coin_drop',
     className = "dropdown",
     options=coins,
-    placeholder="Select a coin you want to examine",
+    value='BTC-USD',
     multi=False,
     clearable = False,
     style={"box-shadow" : "1px 1px 3px lightgray", "background-color" : "white"}
@@ -103,6 +105,7 @@ def get_linegraph(close_price, coin_name):
         x = close_price.index,
         y = close_price.values,
         name = coin_name,
+        marker_color="lightgray"
     )
     return fig
 
@@ -114,7 +117,7 @@ def get_top_bot(data_lb, leaderboard):
     fig2 = get_linegraph(data_lb["Close", leaderboard.iloc[1].name], leaderboard.iloc[1].name)
     fig3 = get_linegraph(data_lb["Close", leaderboard.iloc[-2].name], leaderboard.iloc[-2].name)
     fig4 = get_linegraph(data_lb["Close", leaderboard.iloc[-1].name], leaderboard.iloc[-1].name)
-    return fig1, fig2, fig3, fig4
+    return fig1, leaderboard.iloc[0].name, fig2, leaderboard.iloc[1].name, fig3, leaderboard.iloc[-2].name, fig4, leaderboard.iloc[-1].name
 
 
 
@@ -150,6 +153,7 @@ def plot_technical_analyis(coin='BTC-USD', range="max"):
         boll_window = 30
         df = yf.download(tickers=coin, period = range, interval = "1d")
         x_axis = df.index
+    
     
     #bollinger window parameters
     df['sma'] = df['Close'].rolling(boll_window).mean()
@@ -253,6 +257,25 @@ def plot_technical_analyis(coin='BTC-USD', range="max"):
     )
     return fig, fig2
 
+def plot_info_coin(coin = 'BTC-USD'):
+    #changes code for binance API
+    if coin == "LUNA1-USD":
+        coin = "LUNA-USD"
+    key = "https://api.binance.com/api/v3/ticker/price?symbol="
+    coin_key = coin.replace("-", "")
+    coin_key = coin_key + "T"
+    url = key + coin_key
+    data = requests.get(url)
+    data = data.json()
+    rounded = np.round(float(data["price"]), 3).astype("str")
+    string = "Today's price for \n" + coin + "\n is \n" + rounded + "\n USD"
+    return string
+
+def get_predictions(coin = 'BTC-USD'):
+    pred_tomorrow = "The prediction for tomorrow is that " + coin + "'s price is: "
+    pred_tomorrow2 = "The prediction for tomorrow is that " + coin + "'s price is: "
+    return pred_tomorrow, pred_tomorrow2
+
 # ----------------------------------------------------------------------------------------------------------------------
 # App Layout
 
@@ -297,9 +320,22 @@ app.layout = dbc.Container([
             dcc.Graph(id="technical_analysis", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white"})),
             width=8,
             style={'padding':'2px 15px 15px 15px'}),
+        dbc.Col([html.Div(
+                html.Tr(id="table_info_coin", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),
+            ),
+            html.Div(
+                html.Tr(id="prediction_tomorrow", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),
+            ),
+            html.Div(
+                html.Tr(id="prediction_tomorrow2", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),
+            )],
+            width=4,
+            style={'padding':'2px 15px 15px 15px'}),
+    ]),
+    dbc.Row([
         dbc.Col(html.Div(
             dcc.Graph(id="technical_analysis_vol", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white"})),
-            width=4,
+            width=8,
             style={'padding':'2px 15px 15px 15px'})
     ]),
 ],
@@ -322,18 +358,20 @@ style={'background-color':'#F2F2F2',
 
 def plot(range):
     data_lb, leaderboard = create_leaderboard(range)
-    top1, top2, bot1, bot2 = get_top_bot(data_lb, leaderboard)
-    plt_coins = make_subplots(rows = 2, cols = 2)
+    top1, coin1, top2, coin2, bot1, coin3, bot2, coin4 = get_top_bot(data_lb, leaderboard)
+    plt_coins = make_subplots(rows = 2, cols = 2, subplot_titles=(coin1, coin2, coin3, coin4))
     plt_coins.add_trace(top1, row = 1, col = 1)
     plt_coins.add_trace(top2, row = 1, col = 2)
     plt_coins.add_trace(bot1, row = 2, col = 1)
     plt_coins.add_trace(bot2, row = 2, col = 2)
+    plt_coins.update_layout(showlegend=False)
     plt_lb = plot_leaderboard(leaderboard)
+
     plt_coins.update_layout(
         title = "Top 2 and Worst 2 coins in the leaderboard",
-        xaxis_title = 'Date',
+        # xaxis_title = 'Date',
         xaxis = {"color" : "black"},
-        yaxis_title = f'Close Price',
+        # yaxis_title = f'Close Price',
         yaxis = {"color" : "black"},
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)'
@@ -345,7 +383,10 @@ def plot(range):
 # 2nd callback -> builds technical analysis graph
 @app.callback(
     [Output(component_id='technical_analysis', component_property='figure'),
-    Output(component_id='technical_analysis_vol', component_property='figure')],
+    Output(component_id='technical_analysis_vol', component_property='figure'),
+    Output(component_id='table_info_coin', component_property='children'),
+    Output(component_id='prediction_tomorrow', component_property='children'),
+    Output(component_id='prediction_tomorrow2', component_property='children'),],
     [Input('tech_analysis_coin_drop', 'value'),
     Input('tech_analysis_range_drop', 'value')])
 
@@ -353,8 +394,10 @@ def plot(coin, range):
     # first run of the dashboard
     if coin not in coins:
         coin = "BTC-USD"
-    plt_ta = plot_technical_analyis(coin, range)
-    return plt_ta
+    ta, ta_vol = plot_technical_analyis(coin, range)
+    price = plot_info_coin(coin)
+    pred1, pred2 = get_predictions(coin)
+    return ta, ta_vol, price, pred1, pred2
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Running the app
