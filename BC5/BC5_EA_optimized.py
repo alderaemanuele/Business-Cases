@@ -13,6 +13,12 @@ from plotly.subplots import make_subplots
 import json
 import requests
 import warnings
+from math import ceil
+from datetime import timedelta
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, LSTM
+import datetime as dt
 warnings.filterwarnings("ignore")
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -271,9 +277,97 @@ def plot_info_coin(coin = 'BTC-USD'):
     string = "Today's price for \n" + coin + "\n is \n" + rounded + "\n USD"
     return string
 
+
+def prediction(coin='BTC-USD'):
+    end = dt.date.today()
+    start = end - dt.timedelta(days=365)
+    df = yf.download(tickers=coin, start=start,end=end, interval="1d")
+    df = pd.DataFrame(df['Close'])
+
+    # scaling for better LSTM performance
+    scaler = MinMaxScaler()
+    scaled = scaler.fit_transform(df.values.reshape(-1, 1))
+
+    # how many days to use for testing
+    testing_days = ceil(len(scaled) * 0.2)
+    # how many days to go back for predicting one value
+    prediction_days = ceil(ceil(len(scaled) * 0.8) * 0.05)
+    # how many days in the future to predict from the day after the last date (zero means it predicts the day after)
+    future_day = 1
+
+    X, y = [], []
+
+    # appending target and input data to be later split
+    for i in range(prediction_days, len(scaled) - future_day):
+        X.append(scaled[i - prediction_days:i, 0])
+        y.append(scaled[i + future_day, 0])
+
+    X_train = X[:-testing_days]
+    y_train = y[:-testing_days]
+
+    X_train, y_train = np.array(X_train), np.array(y_train)
+    X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
+
+    # Building and training the model
+    model = Sequential()
+    model.add(LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], 1)))
+    # Prevent overfitting
+    model.add(Dropout(0.2))
+
+    model.add(LSTM(units=50, return_sequences=True))
+
+    model.add(Dropout(0.2))
+
+    model.add(LSTM(units=50))
+
+    model.add(Dropout(0.2))
+
+    model.add(Dense(units=1))
+
+    model.compile(optimizer='adam', loss='mse')
+    model.fit(X_train, y_train, epochs=1)
+
+    model_inputs = scaled[len(scaled) - prediction_days - testing_days:]
+
+    # building test data with same logic as train data, but for last records
+    X_test = []
+    for i in range(prediction_days, len(model_inputs)):
+        X_test.append(model_inputs[i - prediction_days:i, 0])
+
+    X_test = np.array(X_test)
+    X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+
+    predicted_prices_sc = model.predict(X_test)
+    # again prices in dollars
+    predicted_prices = scaler.inverse_transform(predicted_prices_sc.reshape(-1, 1))
+
+    df["Predicted Price"] = np.NaN
+
+    # add next day
+    df.reset_index(inplace=True)
+    df["Date"] = pd.to_datetime(df['Date'])
+    # last date in which we'll predict the  price
+    prediction_date = df.iloc[len(df) - 1]["Date"] + timedelta(days=future_day)
+    # adding the dates in the "future" to the df
+    for date in pd.date_range(start=df.iloc[len(df) - 1]["Date"], end=prediction_date):
+        df = df.append({'Date': date + timedelta(days=future_day)}, ignore_index=True)
+
+    # appending predicted prices
+    df.loc[df.index[-testing_days:], 'Predicted Price'] = predicted_prices
+    price_tmr = df["Predicted Price"].iloc[-2]
+    price_tmr = np.round(price_tmr, 4)
+
+    price_tmr2 = df["Predicted Price"].iloc[-1]
+    price_tmr2 = np.round(price_tmr2, 4)
+
+    return price_tmr, price_tmr2
+
 def get_predictions(coin = 'BTC-USD'):
-    pred_tomorrow = "The prediction for tomorrow is that " + coin + "'s price is: "
-    pred_tomorrow2 = "The prediction for tomorrow is that " + coin + "'s price is: "
+    price_tmr, price_tmr2 = prediction(coin = coin)
+    price_tmr = price_tmr.astype("str")
+    price_tmr2 = price_tmr2.astype("str")
+    pred_tomorrow = "The prediction for tomorrow is that " + coin + "'s price is: " + price_tmr
+    pred_tomorrow2 = "The prediction for tomorrow is that " + coin + "'s price is: " + price_tmr2
     return pred_tomorrow, pred_tomorrow2
 
 # ----------------------------------------------------------------------------------------------------------------------
