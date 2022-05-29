@@ -169,7 +169,7 @@ def plot_leaderboard(leaderboard):
     leaderboard.dropna(axis = 0, inplace=True)
     fig = go.Figure(data=[go.Table(
     header=dict(values=["Coins", "Percentage change in closing price", "Today's Closing Price"],
-                fill_color='lightgray',
+                fill_color='blue',
                 align='center'),
     cells=dict(values=[leaderboard.index, leaderboard["Percentage"].values, leaderboard["Price"].values],
                fill_color='white',
@@ -200,11 +200,13 @@ def plot_technical_analyis(coin='BTC-USD', range="max", indicator = "EMA"):
         df.reset_index(inplace = True)
         short_window = 9
         long_window = 21
+        boll_window = 18
         x_axis = df["Datetime"]
     if (range in ["1mo", "3mo", "1y", "max"]):
         df = yf.download(tickers=coin, period = range, interval = "1d")
         short_window = 100
         long_window = 200
+        boll_window = 30
         x_axis = df.index
 
 
@@ -212,6 +214,9 @@ def plot_technical_analyis(coin='BTC-USD', range="max", indicator = "EMA"):
     # column names for long and short moving average columns
     short_window_col = str(short_window) + '_' + indicator
     long_window_col = str(long_window) + '_' + indicator 
+
+    df['sma'] = df['Close'].rolling(boll_window).mean()
+    df['std'] = df['Close'].rolling(boll_window).std(ddof = 0)
     
     if indicator == 'SMA':
         # Create a short simple moving average column
@@ -295,24 +300,23 @@ def plot_technical_analyis(coin='BTC-USD', range="max", indicator = "EMA"):
                     name = 'Buy',
                     line = {'color': '#00ff95'}
                 ), 
-                
-                #  go.Scatter(
-                #     x = x_axis, 
-                #     y = df[short_window_col] + (df['std'] * 2),
-                #     line_color = 'gray',
-                #     line = {'dash': 'dash'},
-                #     name = 'upper band',
-                #     opacity = 0.5
-                # ),
-                # go.Scatter(
-                #     x = x_axis, 
-                #     y = df[short_window_col] - (df['std'] * 2),
-                #     line_color = 'gray',
-                #     line = {'dash': 'dash'},
-                #     fill = 'tonexty',
-                #     name = 'lower band',
-                #     opacity = 0.5
-                # ),
+                 go.Scatter(
+                    x = x_axis, 
+                    y = df["sma"] + (df['std'] * 2),
+                    line_color = 'gray',
+                    line = {'dash': 'dash'},
+                    name = 'upper band',
+                    opacity = 0.3
+                ),
+                go.Scatter(
+                    x = x_axis, 
+                    y = df["sma"] - (df['std'] * 2),
+                    line_color = 'gray',
+                    line = {'dash': 'dash'},
+                    fill = 'tonexty',
+                    name = 'lower band',
+                    opacity = 0.3
+                ),
             ]
         ,layout=layout)
 
@@ -320,7 +324,7 @@ def plot_technical_analyis(coin='BTC-USD', range="max", indicator = "EMA"):
                 data = go.Bar(
                     x = x_axis,
                     y = df["Volume"],
-                    marker_color = "black"
+                    marker_color = "blue"
                 )
     )
 
