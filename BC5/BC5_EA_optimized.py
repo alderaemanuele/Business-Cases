@@ -63,13 +63,38 @@ dropdown_tech_analysis_range = dcc.Dropdown(
     clearable = False,
     style={"box-shadow" : "1px 1px 3px lightgray", "background-color" : "white"}
     )
+dropdown_tech_analysis_indicator = dcc.Dropdown(
+    id='tech_analysis_indicator_drop',
+    className = "dropdown",
+    # options={"4h":"Last Four Hours", "1d":"Last Day", "5d":"Last Five Days", "1mo":"Last Month", "3mo":"Last Quarter", "1y":"Last Year", "max":"Coin Life" },
+    options={"EMA" : "Exponential Moving Average", "SMA" : "Simple Moving Average"},
+    value='EMA',
+    multi=False,
+    clearable = False,
+    style={"box-shadow" : "1px 1px 3px lightgray", "background-color" : "white"}
+    )
 
+#downloading all data that will be needed for the leaderboard
 data_lb_1d = yf.download(tickers=coins, period = "1d", interval = "15m")
 data_lb_5d = yf.download(tickers=coins, period = "5d", interval = "60m")
 data_lb_1y = yf.download(tickers=coins, period = "1y", interval = "1d")
 data_lb_1mo = data_lb_1y.reset_index().loc[data_lb_1y.reset_index()["Date"] >= datetime.now() - relativedelta(months=1)].set_index("Date")
 data_lb_2mo = data_lb_1y.reset_index().loc[data_lb_1y.reset_index()["Date"] >= datetime.now() - relativedelta(months=2)].set_index("Date")
 data_lb_3mo = data_lb_1y.reset_index().loc[data_lb_1y.reset_index()["Date"] >= datetime.now() - relativedelta(months=3)].set_index("Date")
+
+#donwloading coin price 
+leaderboard_prices = pd.DataFrame(columns = ["Price"])
+for coin in coins:
+    if coin == "LUNA1-USD":
+        coin = "LUNA-USD"
+    key = "https://api.binance.com/api/v3/ticker/price?symbol="
+    coin_key = coin.replace("-", "")
+    coin_key = coin_key + "T"
+    url = key + coin_key
+    data = requests.get(url)
+    data = data.json()
+    rounded = np.round(float(data["price"]), 3)
+    leaderboard_prices.loc[coin] = rounded
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -96,28 +121,39 @@ def create_leaderboard(lb_range = "1d"):
         data_lb = data_lb_1y
 
     # creating empty df
-    leaderboard = pd.DataFrame(columns = ["Percentage"])
+    leaderboard_prc = pd.DataFrame(columns = ["Percentage"])
     # appending percentage change in the timeframe for each coin into leaderboard df
     for coin in coins:
         prc = ((data_lb["Close", coin].iloc[-1] - data_lb["Close", coin].iloc[0]) / data_lb["Close", coin].iloc[-1]) * 100
         prc = np.round(prc, 2)
-        leaderboard.loc[coin] = prc
+        leaderboard_prc.loc[coin] = prc
+
+    leaderboard = leaderboard_prc.merge(right=leaderboard_prices, how="inner", on=leaderboard_prc.index).set_index("key_0")
     leaderboard.sort_values("Percentage", ascending=False, inplace=True)
     return data_lb, leaderboard
 
 def get_linegraph(close_price, coin_name):
-    #layout
-    fig = go.Scatter(
-        x = close_price.index,
-        y = close_price.values,
-        name = coin_name,
-        marker_color="lightgray"
-    )
+
+    if close_price[0] > close_price[-1]:
+        fig = go.Scatter(
+            x = close_price.index,
+            y = close_price.values,
+            name = coin_name,
+            marker_color="red"
+        )
+    else:
+        fig = go.Scatter(
+            x = close_price.index,
+            y = close_price.values,
+            name = coin_name,
+            marker_color="green"
+        )
     return fig
 
 
 def get_top_bot(data_lb, leaderboard):
     """returns the linegraph figures for the two top and bottom performancers for the range specified in create_leaderboard() function """
+    # leaderboard = leaderboard["Percentage"]
     leaderboard.dropna(inplace=True)
     fig1 = get_linegraph(data_lb["Close", leaderboard.iloc[0].name], leaderboard.iloc[0].name)
     fig2 = get_linegraph(data_lb["Close", leaderboard.iloc[1].name], leaderboard.iloc[1].name)
@@ -130,12 +166,12 @@ def get_top_bot(data_lb, leaderboard):
 def plot_leaderboard(leaderboard):
     """returns the table leaderboard figure"""
 
-    leaderboard.dropna(inplace=True)
+    leaderboard.dropna(axis = 0, inplace=True)
     fig = go.Figure(data=[go.Table(
-    header=dict(values=["Coins", "Percentage change in closing price"],
+    header=dict(values=["Coins", "Percentage change in closing price", "Today's Closing Price"],
                 fill_color='lightgray',
                 align='center'),
-    cells=dict(values=[leaderboard.index, leaderboard],
+    cells=dict(values=[leaderboard.index, leaderboard["Percentage"].values, leaderboard["Price"].values],
                fill_color='white',
                align='center'))
     ])
@@ -145,11 +181,11 @@ def plot_leaderboard(leaderboard):
 def plot_technical_analyis(coin='BTC-USD', range="max"):
     """returning technical analysis plots for a certain coin over the time of existence of the coin"""
 
-    if (range in ["1h", "4h"]):
-        boll_window = 18
-        df = yf.download(tickers=coin, period = range, interval = "1m")
-        df.reset_index(inplace = True)
-        x_axis = df["Datetime"]
+    # if (range in ["1h", "4h"]):
+    #     boll_window = 18
+    #     df = yf.download(tickers=coin, period = range, interval = "1m")
+    #     df.reset_index(inplace = True)
+    #     x_axis = df["Datetime"]
     if (range in ["1d", "5d"]):
         boll_window = 18
         df = yf.download(tickers=coin, period = range, interval = "15m")
@@ -265,15 +301,7 @@ def plot_technical_analyis(coin='BTC-USD', range="max"):
 
 def plot_info_coin(coin = 'BTC-USD'):
     #changes code for binance API
-    if coin == "LUNA1-USD":
-        coin = "LUNA-USD"
-    key = "https://api.binance.com/api/v3/ticker/price?symbol="
-    coin_key = coin.replace("-", "")
-    coin_key = coin_key + "T"
-    url = key + coin_key
-    data = requests.get(url)
-    data = data.json()
-    rounded = np.round(float(data["price"]), 3).astype("str")
+    rounded = leaderboard_prices.loc[coin][0].astype("str")
     string = "Today's price for \n" + coin + "\n is \n" + rounded + "\n USD"
     return string
 
@@ -367,7 +395,7 @@ def get_predictions(coin = 'BTC-USD'):
     price_tmr = price_tmr.astype("str")
     price_tmr2 = price_tmr2.astype("str")
     pred_tomorrow = "The prediction for tomorrow is that " + coin + "'s price is: " + price_tmr
-    pred_tomorrow2 = "The prediction for tomorrow is that " + coin + "'s price is: " + price_tmr2
+    pred_tomorrow2 = "The prediction for day after tomorrow is that " + coin + "'s price is: " + price_tmr2
     return pred_tomorrow, pred_tomorrow2
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -406,7 +434,8 @@ app.layout = dbc.Container([
     dbc.Row(dbc.Col(html.H2("Analyze a single coin by looking at the technical analysis built for you", style={'margin-bottom': '5px'}))),
     # Intermediate Row - DropDown Menu
     dbc.Row([dbc.Col(html.Div(dropdown_tech_analysis_coin),width=4, style={'padding': '0px 15px 0px', 'align' : "center"}),
-        dbc.Col(html.Div(dropdown_tech_analysis_range),width=4, style={'padding': '0px 15px 0px', 'align' : "center"})]),
+        dbc.Col(html.Div(dropdown_tech_analysis_range),width=4, style={'padding': '0px 15px 0px', 'align' : "center"}),
+        dbc.Col(html.Div(dropdown_tech_analysis_indicator),width=4, style={'padding': '0px 15px 0px', 'align' : "center"})]),
 
     # 2nd Row
     dbc.Row([
@@ -482,9 +511,10 @@ def plot(range):
     Output(component_id='prediction_tomorrow', component_property='children'),
     Output(component_id='prediction_tomorrow2', component_property='children'),],
     [Input('tech_analysis_coin_drop', 'value'),
-    Input('tech_analysis_range_drop', 'value')])
+    Input('tech_analysis_range_drop', 'value'),
+    Input('tech_analysis_indicator_drop', 'value')])
 
-def plot(coin, range):
+def plot(coin, range, indicator):
     # first run of the dashboard
     if coin not in coins:
         coin = "BTC-USD"
