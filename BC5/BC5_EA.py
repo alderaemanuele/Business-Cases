@@ -169,7 +169,7 @@ def plot_leaderboard(leaderboard):
     leaderboard.dropna(axis = 0, inplace=True)
     fig = go.Figure(data=[go.Table(
     header=dict(values=["Coins", "Percentage change in closing price", "Today's Closing Price"],
-                fill_color='blue',
+                fill_color='lightgray',
                 align='center'),
     cells=dict(values=[leaderboard.index, leaderboard["Percentage"].values, leaderboard["Price"].values],
                fill_color='white',
