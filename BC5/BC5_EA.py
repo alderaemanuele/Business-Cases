@@ -169,7 +169,7 @@ def plot_leaderboard(leaderboard):
     leaderboard.dropna(axis = 0, inplace=True)
     fig = go.Figure(data=[go.Table(
     header=dict(values=["Coins", "Percentage change in closing price", "Today's Closing Price"],
-                fill_color='lightgray',
+                fill_color='#dae9f5',
                 align='center'),
     cells=dict(values=[leaderboard.index, leaderboard["Percentage"].values, leaderboard["Price"].values],
                fill_color='white',
@@ -324,7 +324,7 @@ def plot_technical_analyis(coin='BTC-USD', range="max", indicator = "EMA"):
                 data = go.Bar(
                     x = x_axis,
                     y = df["Volume"],
-                    marker_color = "blue"
+                    marker_color = "#85acc9"
                 )
     )
 
@@ -457,14 +457,15 @@ app.layout = dbc.Container([
     dbc.Row([
         dbc.Col(html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image.decode()))),width=1),
         dbc.Col([html.H1("Crypto Currencies Dashboard",style={'letter-spacing': '1.5px','font-weight': 'bold','text-transform': 'uppercase'}),
-                 html.H2("Business Case n. 5  -  Group I", style={'margin-bottom': '5px'})],
+                 html.H2("Business Case n. 5  -  Group I  -  Emanuele Aldera, Robin Schimdt, Rui Ramos, Muhammad Abdullah", style={'margin-bottom': '5px'})],
                 width=9)
     ]),
 
     # Intermediate Row - Story telling
-    dbc.Row(dbc.Col(html.H2("Discover the coins that performed better in a specified range of time by comparing their percentage changes over the course of the chosen range", style={'margin-bottom': '5px'}))),
+    dbc.Row(dbc.Col(html.H2("Discover the coins that performed better in a specified range of time by comparing their percentage changes over the course of the chosen range", 
+    style={'margin-bottom': '5px', 'padding':'2px 15px 15px 15px'}))),
     # Intermediate Row - DropDown Menu
-    dbc.Row(dbc.Col(html.Div(dropdown_leaderboard),width=4, style={'padding': '0px 15px 0px', "align" : "center"})),
+    dbc.Row(dbc.Col(html.Div(dropdown_leaderboard),width=4, style={'padding': '0px 15px 0px', "align" : "center"}),style={'padding':'2px 15px 15px 15px'}),
 
     # 2nd Row
     dbc.Row([
@@ -476,14 +477,14 @@ app.layout = dbc.Container([
             dcc.Graph(id="leaderboard_coins", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white"})),
             width=6,
             style={'padding':'2px 15px 15px 15px'}),
-    ]),
+    ],style={'padding':'2px 15px 15px 15px'}),
 
     # Intermediate Row - Story telling
-    dbc.Row(dbc.Col(html.H2("Analyze a single coin by looking at the technical analysis built for you", style={'margin-bottom': '5px'}))),
+    dbc.Row(dbc.Col(html.H2("Analyze a single coin by looking at the technical analysis built for you", style={'margin-bottom': '5px'})),style={'padding':'2px 15px 15px 15px'}),
     # Intermediate Row - DropDown Menu
     dbc.Row([dbc.Col(html.Div(dropdown_tech_analysis_coin),width=4, style={'padding': '0px 15px 0px', 'align' : "center"}),
         dbc.Col(html.Div(dropdown_tech_analysis_range),width=4, style={'padding': '0px 15px 0px', 'align' : "center"}),
-        dbc.Col(html.Div(dropdown_tech_analysis_indicator),width=4, style={'padding': '0px 15px 0px', 'align' : "center"})]),
+        dbc.Col(html.Div(dropdown_tech_analysis_indicator),width=4, style={'padding': '0px 15px 0px', 'align' : "center"})],style={'padding':'2px 15px 15px 15px'}),
 
     # 2nd Row
     dbc.Row([
@@ -492,13 +493,13 @@ app.layout = dbc.Container([
             width=8,
             style={'padding':'2px 15px 15px 15px'}),
         dbc.Col([html.Div(
-                html.Tr(id="table_info_coin", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),
+                html.Tr(id="table_info_coin", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),style={'padding':'2px 15px 15px 15px'},
             ),
             html.Div(
-                html.Tr(id="prediction_tomorrow", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),
+                html.Tr(id="prediction_tomorrow", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),style={'padding':'2px 15px 15px 15px'},
             ),
             html.Div(
-                html.Tr(id="prediction_tomorrow2", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),
+                html.Tr(id="prediction_tomorrow2", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),style={'padding':'2px 15px 15px 15px'},
             )],
             width=4,
             style={'padding':'2px 15px 15px 15px'}),
@@ -512,7 +513,7 @@ app.layout = dbc.Container([
 ],
 #Container
 fluid=True,
-style={'background-color':'#F2F2F2',
+style={'background-color':'#dae9f5',
        'font-family': 'sans-serif',
        'color': '#606060',
        'font-size':'14px'
