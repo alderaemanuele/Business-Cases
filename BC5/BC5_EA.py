@@ -16,8 +16,9 @@ import warnings
 from math import ceil
 from datetime import timedelta
 from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout, LSTM
+import tensorflow as tf
+# from tensorflow.keras.models import Sequential
+# from tensorflow.keras.layers import Dense, Dropout, LSTM
 import datetime as dt
 warnings.filterwarnings("ignore")
 
@@ -139,14 +140,18 @@ def get_linegraph(close_price, coin_name):
             x = close_price.index,
             y = close_price.values,
             name = coin_name,
-            marker_color="red"
+            marker_color="red",
+            fill="tozeroy",
+            fillcolor="rgb(251, 180, 174)"
         )
     else:
         fig = go.Scatter(
             x = close_price.index,
             y = close_price.values,
             name = coin_name,
-            marker_color="green"
+            marker_color="green",
+            fill="tozeroy",
+            fillcolor="rgb(204, 235, 197)"
         )
     return fig
 
@@ -355,10 +360,15 @@ def plot_info_coin(coin = 'BTC-USD'):
 
 
 def prediction(coin='BTC-USD'):
-    end = dt.date.today()
-    start = end - dt.timedelta(days=365)
-    df = yf.download(tickers=coin, start=start,end=end, interval="1d")
-    df = pd.DataFrame(df['Close'])
+    #end = dt.date.today()
+    #start = end - dt.timedelta(days=365)
+    #df = yf.download(tickers=coin, start=start,end=end, interval="1d")
+    #df = pd.DataFrame(df['Close'])
+
+    df = pd.DataFrame(data_lb_1y["Close", coin])
+    df = df["Close"].tail(100)
+
+    tf.random.set_seed(12)
 
     # scaling for better LSTM performance
     scaler = MinMaxScaler()
@@ -385,20 +395,20 @@ def prediction(coin='BTC-USD'):
     X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
 
     # Building and training the model
-    model = Sequential()
-    model.add(LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], 1)))
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], 1)))
     # Prevent overfitting
-    model.add(Dropout(0.2))
+    model.add(tf.keras.layers.Dropout(0.2))
 
-    model.add(LSTM(units=50, return_sequences=True))
+    model.add(tf.keras.layers.LSTM(units=50, return_sequences=True))
 
-    model.add(Dropout(0.2))
+    model.add(tf.keras.layers.Dropout(0.2))
 
-    model.add(LSTM(units=50))
+    model.add(tf.keras.layers.LSTM(units=50))
 
-    model.add(Dropout(0.2))
+    model.add(tf.keras.layers.Dropout(0.2))
 
-    model.add(Dense(units=1))
+    model.add(tf.keras.layers.Dense(units=1))
 
     model.compile(optimizer='adam', loss='mse')
     model.fit(X_train, y_train, epochs=1)
@@ -457,7 +467,7 @@ app.layout = dbc.Container([
     dbc.Row([
         dbc.Col(html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image.decode()))),width=1),
         dbc.Col([html.H1("Crypto Currencies Dashboard",style={'letter-spacing': '1.5px','font-weight': 'bold','text-transform': 'uppercase'}),
-                 html.H2("Business Case n. 5  -  Group I  -  Emanuele Aldera, Robin Schimdt, Rui Ramos, Muhammad Abdullah", style={'margin-bottom': '5px'})],
+                 html.H2("Business Case n. 5  -  Group I  -  Emanuele Aldera, Robin Schmidt, Rui Ramos, Muhammad Abdullah", style={'margin-bottom': '5px'})],
                 width=9)
     ]),
 
