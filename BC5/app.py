@@ -16,8 +16,9 @@ import warnings
 from math import ceil
 from datetime import timedelta
 from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout, LSTM
+import tensorflow as tf
+# from tensorflow.keras.models import Sequential
+# from tensorflow.keras.layers import Dense, Dropout, LSTM
 import datetime as dt
 warnings.filterwarnings("ignore")
 
@@ -139,14 +140,18 @@ def get_linegraph(close_price, coin_name):
             x = close_price.index,
             y = close_price.values,
             name = coin_name,
-            marker_color="red"
+            marker_color="red",
+            fill="tozeroy",
+            fillcolor="rgb(251, 180, 174)"
         )
     else:
         fig = go.Scatter(
             x = close_price.index,
             y = close_price.values,
             name = coin_name,
-            marker_color="green"
+            marker_color="green",
+            fill="tozeroy",
+            fillcolor="rgb(204, 235, 197)"
         )
     return fig
 
@@ -168,8 +173,8 @@ def plot_leaderboard(leaderboard):
 
     leaderboard.dropna(axis = 0, inplace=True)
     fig = go.Figure(data=[go.Table(
-    header=dict(values=["Coins", "Percentage change in closing price", "Today's Closing Price"],
-                fill_color='lightgray',
+    header=dict(values=["Coins", "Percentage change in closing price", "Closing Price"],
+                fill_color='#dae9f5',
                 align='center'),
     cells=dict(values=[leaderboard.index, leaderboard["Percentage"].values, leaderboard["Price"].values],
                fill_color='white',
@@ -178,38 +183,81 @@ def plot_leaderboard(leaderboard):
     return fig
 
 
-def plot_technical_analyis(coin='BTC-USD', range="max"):
+def plot_technical_analyis(coin='BTC-USD', range="max", indicator = "EMA"):
     """returning technical analysis plots for a certain coin over the time of existence of the coin"""
 
-    # if (range in ["1h", "4h"]):
-    #     boll_window = 18
-    #     df = yf.download(tickers=coin, period = range, interval = "1m")
-    #     df.reset_index(inplace = True)
-    #     x_axis = df["Datetime"]
+    '''
+    The function takes the cyptocurrency, look-back periods and the indicator type(SMA or EMA) as input 
+    and returns the respective MA Crossover chart along with the buy/sell signals for the given period.
+    '''
+    # short_window - (int)lookback period for short-term moving average. Eg: 5, 10, 20 
+    # long_window - (int)lookback period for long-term moving average. Eg: 50, 100, 200
+    # moving_avg - (str)the type of moving average to use ('SMA' or 'EMA')
+    # display_table - (bool)whether to display the date and price table at buy/sell positions(True/False)
+    
+    
+    short_window = 20
+    long_window = 50
+
+
     if (range in ["1d", "5d"]):
-        boll_window = 18
         df = yf.download(tickers=coin, period = range, interval = "15m")
         df.reset_index(inplace = True)
+        short_window = 9
+        long_window = 21
+        boll_window = 18
         x_axis = df["Datetime"]
     if (range in ["1mo", "3mo", "1y", "max"]):
-        boll_window = 30
         df = yf.download(tickers=coin, period = range, interval = "1d")
+        short_window = 100
+        long_window = 200
+        boll_window = 30
         x_axis = df.index
-    
-    
-    #bollinger window parameters
+
+
+
+    # column names for long and short moving average columns
+    short_window_col = str(short_window) + '_' + indicator
+    long_window_col = str(long_window) + '_' + indicator 
+
     df['sma'] = df['Close'].rolling(boll_window).mean()
     df['std'] = df['Close'].rolling(boll_window).std(ddof = 0)
-    df.reset_index(inplace=True)
+    
+    if indicator == 'SMA':
+        # Create a short simple moving average column
+        df[short_window_col] = df['Close'].rolling(window = short_window, min_periods = 1).mean()
+
+        # Create a long simple moving average column
+        df[long_window_col] = df['Close'].rolling(window = long_window, min_periods = 1).mean()
+
+    elif indicator == 'EMA':
+        # Create short exponential moving average column
+        df[short_window_col] = df['Close'].ewm(span = short_window, adjust = False).mean()
+
+        # Create a long exponential moving average column
+        df[long_window_col] = df['Close'].ewm(span = long_window, adjust = False).mean()
+
+    # create a new column 'Signal' such that if faster moving average is greater than slower moving average 
+    # then set Signal as 1 else 0.
+    df['Signal'] = 0.0  
+    df['Signal'] = np.where(df[short_window_col] > df[long_window_col], 1.0, 0.0) 
+
+    # create a new column 'Position' which is a day-to-day difference of the 'Signal' column. 
+    df['Position'] = df['Signal'].diff() 
+    
     layout = go.Layout(
         autosize=False,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+    
         xaxis= go.layout.XAxis(linecolor = 'black',
                               linewidth = 1,
                               mirror = True),
-
+    
         yaxis= go.layout.YAxis(linecolor = 'black',
                               linewidth = 1,
                               mirror = True),
+    
         margin=go.layout.Margin(
             l=50,
             r=50,
@@ -218,76 +266,73 @@ def plot_technical_analyis(coin='BTC-USD', range="max"):
             pad = 4
         )
     )
-    fig = go.Figure(
+    
+    fig1 = go.Figure(
+    
         data=[go.Candlestick(
         x=x_axis,
         open=df['Open'], high=df['High'],
         low=df['Low'], close=df['Close'],
         increasing_line_color= 'Green', decreasing_line_color= 'Red'
-    ), 
+    ), #
                 go.Scatter(
                     x = x_axis, 
-                    y = df["Close"].rolling(window=21).mean(),
+                    y = df[short_window_col],
                     mode = 'lines', 
-                    name = '21SMA',
-                    line = {'color': '#ffff00'}
-                ),
-                go.Scatter(
-                    x = x_axis, 
-                    y = df["Close"].rolling(window=50).mean(),
-                    mode = 'lines',
-                    name = '50SMA',
+                    name = short_window_col,
                     line = {'color': '#00ff11'}
-                ), 
-                go.Scatter(
-                    x = x_axis, 
-                    y = df["Close"].rolling(window=200).mean(),
-                    mode = 'lines',
-                    name = '200SMA',
-                    line = {'color': '#ff0008'}
-                ), 
-                go.Scatter(
-                    x = x_axis, 
-                    y = df["sma"],
-                    mode = 'lines', 
-                    name = '30SMA',
-                    line = {'color': '#b300ff'}
                 ),
+                go.Scatter(
+                    x = x_axis, 
+                    y = df[long_window_col],
+                    mode = 'lines',
+                    name = long_window_col,
+                    line = {'color': '#ff0008'}
+                ),
+                go.Scatter(
+                    x = x_axis[df["Position"] == -1], 
+                    y = df[long_window_col][df["Position"] == -1],
+                    mode = 'markers',
+                    marker= dict(symbol='triangle-down', size = 14),
+                    name = 'Sell',
+                    line = {'color': '#ff0000'}
+                ),
+                go.Scatter(
+                    x = x_axis[df["Position"] == 1], 
+                    y = df[short_window_col][df["Position"] == 1],
+                    mode = 'markers',
+                    marker= dict(symbol='triangle-up', size = 14),
+                    name = 'Buy',
+                    line = {'color': '#00ff95'}
+                ), 
                  go.Scatter(
                     x = x_axis, 
-                    y = df['sma'] + (df['std'] * 2),
+                    y = df["sma"] + (df['std'] * 2),
                     line_color = 'gray',
                     line = {'dash': 'dash'},
                     name = 'upper band',
-                    opacity = 0.5
+                    opacity = 0.3
                 ),
                 go.Scatter(
                     x = x_axis, 
-                    y = df['sma'] - (df['std'] * 2),
+                    y = df["sma"] - (df['std'] * 2),
                     line_color = 'gray',
                     line = {'dash': 'dash'},
                     fill = 'tonexty',
                     name = 'lower band',
-                    opacity = 0.5
+                    opacity = 0.3
                 ),
             ]
         ,layout=layout)
+
     fig2 = go.Figure(
                 data = go.Bar(
                     x = x_axis,
                     y = df["Volume"],
-                    marker_color = "black"
+                    marker_color = "#85acc9"
                 )
     )
-    fig.update_layout(
-        title = f'The Candlestick graph for {coin}',
-        xaxis_title = 'Date',
-        yaxis_title = f'{coin}',
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        xaxis_rangeslider_visible = False
-    )
-    fig.update_yaxes(tickprefix='$')
+
     fig2.update_layout(
         title = f'The Barchart graph showing volume for {coin}',
         xaxis_title = 'Date',
@@ -297,20 +342,36 @@ def plot_technical_analyis(coin='BTC-USD', range="max"):
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)'
     )
-    return fig, fig2
+
+    fig1.update_layout(
+        legend=dict(yanchor="top", y=0.9, xanchor="left", x=0.06),
+        title = f'The Candlestick graph for {coin}',
+        xaxis_title = 'Date',
+        yaxis_title = coin,
+        xaxis_rangeslider_visible = False #DEFAULT TRUE, WHILE TAKING SCREENSHOT WE PUT IT TO FALSE
+    )
+
+    return fig1, fig2
 
 def plot_info_coin(coin = 'BTC-USD'):
     #changes code for binance API
+    if coin == "LUNA1-USD":
+        coin = "LUNA-USD"
     rounded = leaderboard_prices.loc[coin][0].astype("str")
-    string = "Today's price for \n" + coin + "\n is \n" + rounded + "\n USD"
-    return string
+    string = "Today's price for " + coin + " is " + rounded
+    return string, rounded
 
 
 def prediction(coin='BTC-USD'):
-    end = dt.date.today()
-    start = end - dt.timedelta(days=365)
-    df = yf.download(tickers=coin, start=start,end=end, interval="1d")
-    df = pd.DataFrame(df['Close'])
+    #end = dt.date.today()
+    #start = end - dt.timedelta(days=365)
+    #df = yf.download(tickers=coin, start=start,end=end, interval="1d")
+    #df = pd.DataFrame(df['Close'])
+
+    df = pd.DataFrame(data_lb_1y["Close", coin])
+    df = df["Close"].tail(100)
+
+    tf.random.set_seed(12)
 
     # scaling for better LSTM performance
     scaler = MinMaxScaler()
@@ -337,20 +398,20 @@ def prediction(coin='BTC-USD'):
     X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
 
     # Building and training the model
-    model = Sequential()
-    model.add(LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], 1)))
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], 1)))
     # Prevent overfitting
-    model.add(Dropout(0.2))
+    model.add(tf.keras.layers.Dropout(0.2))
 
-    model.add(LSTM(units=50, return_sequences=True))
+    model.add(tf.keras.layers.LSTM(units=50, return_sequences=True))
 
-    model.add(Dropout(0.2))
+    model.add(tf.keras.layers.Dropout(0.2))
 
-    model.add(LSTM(units=50))
+    model.add(tf.keras.layers.LSTM(units=50))
 
-    model.add(Dropout(0.2))
+    model.add(tf.keras.layers.Dropout(0.2))
 
-    model.add(Dense(units=1))
+    model.add(tf.keras.layers.Dense(units=1))
 
     model.compile(optimizer='adam', loss='mse')
     model.fit(X_train, y_train, epochs=1)
@@ -394,12 +455,69 @@ def get_predictions(coin = 'BTC-USD'):
     price_tmr, price_tmr2 = prediction(coin = coin)
     price_tmr = price_tmr.astype("str")
     price_tmr2 = price_tmr2.astype("str")
-    pred_tomorrow = "The prediction for tomorrow is that " + coin + "'s price is: " + price_tmr
-    pred_tomorrow2 = "The prediction for day after tomorrow is that " + coin + "'s price is: " + price_tmr2
-    return pred_tomorrow, pred_tomorrow2
+    pred_tomorrow = "The prediction for tomorrow is that " + coin + "'s price is " + price_tmr
+    pred_tomorrow2 = "The prediction for the day after tomorrow is that " + coin + "'s price is " + price_tmr2
+    return pred_tomorrow, pred_tomorrow2, price_tmr, price_tmr2
 
-# ----------------------------------------------------------------------------------------------------------------------
-# App Layout
+def gauge_plot(predicted_value, current_value, interval=0.05, coin = 'BTC-USD'):
+
+    predicted_value = predicted_value.astype("float")
+    current_value = current_value.astype("float")
+    plot_bgcolor = "rgba(0,0,0,0)"
+    quadrant_colors = [plot_bgcolor, "red", "#eff229", "green"]
+    quadrant_text = ["", "<b>Sell</b>", "<b>Hold</b>", "<b>Buy</b>"]
+    n_quadrants = len(quadrant_colors) - 1
+
+    min_value = predicted_value * (1 - interval)
+    max_value = predicted_value * (1 + interval)
+    hand_length = np.sqrt(2) / 4
+    hand_angle = np.pi * (1 - (max(min_value, min(max_value, current_value)) - min_value) / (max_value - min_value))
+
+    fig = go.Figure(
+        data=[
+            go.Pie(
+                values=[0.5] + (np.ones(n_quadrants) / 2 / n_quadrants).tolist(),
+                rotation=90,
+                hole=0.5,
+                marker_colors=quadrant_colors,
+                text=quadrant_text,
+                textinfo="text",
+                hoverinfo="skip",
+            ),
+        ],
+        layout=go.Layout(
+            showlegend=False,
+            margin=dict(b=0, t=10, l=10, r=10),
+            # width=450,
+            # height=450,
+            paper_bgcolor=plot_bgcolor,
+            annotations=[
+                go.layout.Annotation(
+                    text=f"<b>{coin}</b>",
+                    x=0.5, xanchor="center", xref="paper",
+                    y=0.25, yanchor="bottom", yref="paper",
+                    showarrow=False,
+                )
+            ],
+            shapes=[
+                go.layout.Shape(
+                    type="circle",
+                    x0=0.48, x1=0.52,
+                    y0=0.48, y1=0.52,
+                    fillcolor="#333",
+                    line_color="#333",
+                ),
+                go.layout.Shape(
+                    type="line",
+                    x0=0.5, x1=0.5 + hand_length * np.cos(hand_angle),
+                    y0=0.5, y1=0.5 + hand_length * np.sin(hand_angle),
+                    line=dict(color="#333", width=4)
+                )
+            ]
+        )
+    )
+    return fig
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # App layout
@@ -409,14 +527,15 @@ app.layout = dbc.Container([
     dbc.Row([
         dbc.Col(html.Div(html.Img(src='data:image/png;base64,{}'.format(encoded_image.decode()))),width=1),
         dbc.Col([html.H1("Crypto Currencies Dashboard",style={'letter-spacing': '1.5px','font-weight': 'bold','text-transform': 'uppercase'}),
-                 html.H2("Business Case n. 5  -  Group I", style={'margin-bottom': '5px'})],
+                 html.H2("Business Case n. 5  -  Group I  -  Emanuele Aldera, Robin Schmidt, Rui Ramos, Muhammad Abdullah", style={'margin-bottom': '5px'})],
                 width=9)
     ]),
 
     # Intermediate Row - Story telling
-    dbc.Row(dbc.Col(html.H2("Discover the coins that performed better in a specified range of time by comparing their percentage changes over the course of the chosen range", style={'margin-bottom': '5px'}))),
+    dbc.Row(dbc.Col(html.H2("Discover the coins that performed better in a specified range of time by comparing their percentage changes over the course of the chosen range", 
+    style={'margin-bottom': '5px', 'padding':'2px 15px 15px 15px'}))),
     # Intermediate Row - DropDown Menu
-    dbc.Row(dbc.Col(html.Div(dropdown_leaderboard),width=4, style={'padding': '0px 15px 0px', "align" : "center"})),
+    dbc.Row(dbc.Col(html.Div(dropdown_leaderboard),width=4, style={'padding': '0px 15px 0px', "align" : "center"}),style={'padding':'2px 15px 15px 15px'}),
 
     # 2nd Row
     dbc.Row([
@@ -428,14 +547,14 @@ app.layout = dbc.Container([
             dcc.Graph(id="leaderboard_coins", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white"})),
             width=6,
             style={'padding':'2px 15px 15px 15px'}),
-    ]),
+    ],style={'padding':'2px 15px 15px 15px'}),
 
     # Intermediate Row - Story telling
-    dbc.Row(dbc.Col(html.H2("Analyze a single coin by looking at the technical analysis built for you", style={'margin-bottom': '5px'}))),
+    dbc.Row(dbc.Col(html.H2("Analyze a single coin by looking at the technical analysis built for you", style={'margin-bottom': '5px'})),style={'padding':'2px 15px 15px 15px'}),
     # Intermediate Row - DropDown Menu
     dbc.Row([dbc.Col(html.Div(dropdown_tech_analysis_coin),width=4, style={'padding': '0px 15px 0px', 'align' : "center"}),
         dbc.Col(html.Div(dropdown_tech_analysis_range),width=4, style={'padding': '0px 15px 0px', 'align' : "center"}),
-        dbc.Col(html.Div(dropdown_tech_analysis_indicator),width=4, style={'padding': '0px 15px 0px', 'align' : "center"})]),
+        dbc.Col(html.Div(dropdown_tech_analysis_indicator),width=4, style={'padding': '0px 15px 0px', 'align' : "center"})],style={'padding':'2px 15px 15px 15px'}),
 
     # 2nd Row
     dbc.Row([
@@ -444,13 +563,13 @@ app.layout = dbc.Container([
             width=8,
             style={'padding':'2px 15px 15px 15px'}),
         dbc.Col([html.Div(
-                html.Tr(id="table_info_coin", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),
+                html.Tr(id="table_info_coin", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),style={'padding':'2px 15px 15px 15px'},
             ),
             html.Div(
-                html.Tr(id="prediction_tomorrow", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),
+                html.Tr(id="prediction_tomorrow", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),style={'padding':'2px 15px 15px 15px'},
             ),
             html.Div(
-                html.Tr(id="prediction_tomorrow2", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),
+                html.Tr(id="prediction_tomorrow2", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white", "font-size":"30px"}),style={'padding':'2px 15px 15px 15px'},
             )],
             width=4,
             style={'padding':'2px 15px 15px 15px'}),
@@ -459,12 +578,16 @@ app.layout = dbc.Container([
         dbc.Col(html.Div(
             dcc.Graph(id="technical_analysis_vol", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white"})),
             width=8,
+            style={'padding':'2px 15px 15px 15px'}), 
+        dbc.Col(html.Div(
+            dcc.Graph(id="buy_sell", style={'box-shadow':'1px 1px 3px lightgray', "background-color" : "white"})),
+            width=4,
             style={'padding':'2px 15px 15px 15px'})
-    ]),
+    ], style={'padding':'2px 15px 15px 15px'}),
 ],
 #Container
 fluid=True,
-style={'background-color':'#F2F2F2',
+style={'background-color':'#dae9f5',
        'font-family': 'sans-serif',
        'color': '#606060',
        'font-size':'14px'
@@ -509,7 +632,8 @@ def plot(range):
     Output(component_id='technical_analysis_vol', component_property='figure'),
     Output(component_id='table_info_coin', component_property='children'),
     Output(component_id='prediction_tomorrow', component_property='children'),
-    Output(component_id='prediction_tomorrow2', component_property='children'),],
+    Output(component_id='prediction_tomorrow2', component_property='children'),
+    Output(component_id='buy_sell', component_property='figure')],
     [Input('tech_analysis_coin_drop', 'value'),
     Input('tech_analysis_range_drop', 'value'),
     Input('tech_analysis_indicator_drop', 'value')])
@@ -518,12 +642,13 @@ def plot(coin, range, indicator):
     # first run of the dashboard
     if coin not in coins:
         coin = "BTC-USD"
-    ta, ta_vol = plot_technical_analyis(coin, range)
-    price = plot_info_coin(coin)
-    pred1, pred2 = get_predictions(coin)
-    return ta, ta_vol, price, pred1, pred2
+    ta, ta_vol = plot_technical_analyis(coin, range, indicator)
+    price_string, price_today = plot_info_coin(coin)
+    pred1, pred2, price_tom, price_tom2= get_predictions(coin)
+    buy_sell_plot = gauge_plot(price_tom2, price_today, 0.2, coin)
+    return ta, ta_vol, price_string, pred1, pred2, buy_sell_plot
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Running the app
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(debug=False)
